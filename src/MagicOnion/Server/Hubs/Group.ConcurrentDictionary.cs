@@ -296,6 +296,70 @@ namespace MagicOnion.Server.Hubs
                 return promise.AsTask();
             }
         }
+        public Task WriteIncludeAsync<T>(int methodId, T value, Guid[] connectionIds, bool fireAndForget)
+        {
+            var message = BuildMessage(methodId, value);
+            if (fireAndForget)
+            {
+                var writeCount = 0;
+                foreach (var item in members)
+                {
+                    foreach (var item2 in connectionIds)
+                    {
+                        if (item.Value.ContextId != item2)
+                        {
+                            goto NEXT;
+                        }
+                    }
+                    WriteInAsyncLockVoid(item.Value, message);
+                    writeCount++;
+                NEXT:
+                    continue;
+                }
+                logger.InvokeHubBroadcast(GroupName, message.Length, writeCount);
+                return TaskEx.CompletedTask;
+            }
+            else
+            {
+                var rent = ArrayPool<ValueTask>.Shared.Rent(approximatelyLength);
+                ValueTask promise;
+                var writeCount = 0;
+                try
+                {
+                    var buffer = rent;
+                    var index = 0;
+                    foreach (var item in members)
+                    {
+                        if (buffer.Length < index)
+                        {
+                            Array.Resize(ref buffer, buffer.Length * 2);
+                        }
+
+                        foreach (var item2 in connectionIds)
+                        {
+                            if (item.Value.ContextId != item2)
+                            {
+                                buffer[index++] = default(ValueTask);
+                                goto NEXT;
+                            }
+                        }
+                        buffer[index++] = WriteInAsyncLock(item.Value, message);
+                        writeCount++;
+
+                    NEXT:
+                        continue;
+                    }
+
+                    promise = ToPromise(buffer, index);
+                }
+                finally
+                {
+                    ArrayPool<ValueTask>.Shared.Return(rent, true);
+                }
+                logger.InvokeHubBroadcast(GroupName, message.Length, writeCount);
+                return promise.AsTask();
+            }
+        }
 
         public Task WriteRawAsync(ArraySegment<byte> msg, Guid[] exceptConnectionIds, bool fireAndForget)
         {

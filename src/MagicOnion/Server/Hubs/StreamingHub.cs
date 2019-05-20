@@ -42,6 +42,14 @@ namespace MagicOnion.Server.Hubs
             return (TReceiver)Activator.CreateInstance(type, new object[] { group, excepts });
         }
 
+        [Ignore]
+        protected TReceiver BroadcastInclude(IGroup group, Guid[] includes)
+        {
+            var type = DynamicBroadcasterBuilder<TReceiver>.BroadcasterType_IncludeMany;
+            return (TReceiver)Activator.CreateInstance(type, new object[] { group, includes });
+        }
+
+
         /// <summary>
         /// Called before connect, instead of constructor.
         /// </summary>
