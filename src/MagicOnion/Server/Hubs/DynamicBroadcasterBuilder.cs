@@ -46,10 +46,12 @@ namespace MagicOnion.Server.Hubs
         public static readonly Type BroadcasterType;
         public static readonly Type BroadcasterType_ExceptOne;
         public static readonly Type BroadcasterType_ExceptMany;
+        public static readonly Type BroadcasterType_IncludeMany;
 
         static readonly MethodInfo groupWriteAllMethodInfo = typeof(IGroup).GetMethod(nameof(IGroup.WriteAllAsync));
         static readonly MethodInfo groupWriteExceptOneMethodInfo = typeof(IGroup).GetMethods().First(x => x.Name == nameof(IGroup.WriteExceptAsync) && !x.GetParameters()[2].ParameterType.IsArray);
         static readonly MethodInfo groupWriteExceptManyMethodInfo = typeof(IGroup).GetMethods().First(x => x.Name == nameof(IGroup.WriteExceptAsync) && x.GetParameters()[2].ParameterType.IsArray);
+        static readonly MethodInfo groupWriteIncludeManyMethodInfo = typeof(IGroup).GetMethods().First(x => x.Name == nameof(IGroup.WriteExceptAsync) && x.GetParameters()[2].ParameterType.IsArray);
 
         static readonly MethodInfo fireAndForget = typeof(BroadcasterHelper).GetMethod(nameof(BroadcasterHelper.FireAndForget), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
 
@@ -80,6 +82,12 @@ namespace MagicOnion.Server.Hubs
                 var (group, except, ctor) = DefineConstructor3(typeBuilder);
                 DefineMethods(typeBuilder, t, group, methodDefinitions, groupWriteExceptManyMethodInfo, except);
                 BroadcasterType_ExceptMany = typeBuilder.CreateTypeInfo().AsType();
+            }
+            {
+                var typeBuilder = asm.DefineType($"{AssemblyHolder.ModuleName}.{ti.FullName}BroadcasterIncludeMany_{Guid.NewGuid().ToString()}", TypeAttributes.Public, typeof(object), new Type[] { t });
+                var (group, except, ctor) = DefineConstructor4(typeBuilder);
+                DefineMethods(typeBuilder, t, group, methodDefinitions, groupWriteIncludeManyMethodInfo, except);
+                BroadcasterType_IncludeMany = typeBuilder.CreateTypeInfo().AsType();
             }
         }
 
@@ -143,6 +151,28 @@ namespace MagicOnion.Server.Hubs
             il.Emit(OpCodes.Ret);
 
             return (groupField, exceptField, ctor);
+        }
+
+        static (FieldInfo groupField, FieldInfo exceptField, ConstructorInfo) DefineConstructor4(TypeBuilder typeBuilder)
+        {
+            // .ctor(IGroup group, Guid[] except)
+            var groupField = typeBuilder.DefineField("group", typeof(IGroup), FieldAttributes.Private | FieldAttributes.InitOnly);
+            var includeField = typeBuilder.DefineField("includes", typeof(Guid[]), FieldAttributes.Private | FieldAttributes.InitOnly);
+
+            var ctor = typeBuilder.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, new[] { typeof(IGroup), typeof(Guid[]) });
+            var il = ctor.GetILGenerator();
+
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Call, typeof(object).GetConstructors().First());
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Ldarg_1);
+            il.Emit(OpCodes.Stfld, groupField);
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Stfld, includeField);
+            il.Emit(OpCodes.Ret);
+
+            return (groupField, includeField, ctor);
         }
 
         static void DefineMethods(TypeBuilder typeBuilder, Type interfaceType, FieldInfo groupField, BroadcasterHelper.MethodDefinition[] definitions, MethodInfo writeMethod, FieldInfo exceptField)

@@ -248,6 +248,58 @@ namespace MagicOnion.Server.Hubs
             }
         }
 
+        public Task WriteIncludeAsync<T>(int methodId, T value, Guid[] connectionIds, bool fireAndForget)
+        {
+            var message = BuildMessage(methodId, value);
+
+            var source = members;
+            if (fireAndForget)
+            {
+                var writeCount = 0;
+                for (int i = 0; i < source.Length; i++)
+                {
+                    foreach (var item in connectionIds)
+                    {
+                        if (source[i].ContextId != item)
+                        {
+                            goto NEXT;
+                        }
+                    }
+
+                    WriteInAsyncLockVoid(source[i], message);
+                    writeCount++;
+                    NEXT:
+                    continue;
+                }
+                logger.InvokeHubBroadcast(GroupName, message.Length, writeCount);
+                return TaskEx.CompletedTask;
+            }
+            else
+            {
+                var promise = new ReservedWhenAllPromise(source.Length);
+                var writeCount = 0;
+                for (int i = 0; i < source.Length; i++)
+                {
+                    foreach (var item in connectionIds)
+                    {
+                        if (source[i].ContextId != item)
+                        {
+                            promise.Add(default(ValueTask));
+                            goto NEXT;
+                        }
+                    }
+
+                    promise.Add(WriteInAsyncLock(source[i], message));
+                    writeCount++;
+                    NEXT:
+                    continue;
+                }
+
+                logger.InvokeHubBroadcast(GroupName, message.Length, writeCount);
+                return promise.AsValueTask().AsTask();
+            }
+        }
+
         public Task WriteRawAsync(ArraySegment<byte> msg, Guid[] exceptConnectionIds, bool fireAndForget)
         {
             // oh, copy is bad but current gRPC interface only accepts byte[]...
