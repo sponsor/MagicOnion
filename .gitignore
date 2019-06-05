@@ -118,3 +118,4 @@ nuget/tools/*
 nuget/*.nupkg
 nuget/*.unitypackage
 .vs/
+.idea/

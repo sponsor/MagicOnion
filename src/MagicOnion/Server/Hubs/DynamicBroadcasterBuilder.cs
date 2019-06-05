@@ -51,7 +51,7 @@ namespace MagicOnion.Server.Hubs
         static readonly MethodInfo groupWriteAllMethodInfo = typeof(IGroup).GetMethod(nameof(IGroup.WriteAllAsync));
         static readonly MethodInfo groupWriteExceptOneMethodInfo = typeof(IGroup).GetMethods().First(x => x.Name == nameof(IGroup.WriteExceptAsync) && !x.GetParameters()[2].ParameterType.IsArray);
         static readonly MethodInfo groupWriteExceptManyMethodInfo = typeof(IGroup).GetMethods().First(x => x.Name == nameof(IGroup.WriteExceptAsync) && x.GetParameters()[2].ParameterType.IsArray);
-        static readonly MethodInfo groupWriteIncludeManyMethodInfo = typeof(IGroup).GetMethods().First(x => x.Name == nameof(IGroup.WriteExceptAsync) && x.GetParameters()[2].ParameterType.IsArray);
+        static readonly MethodInfo groupWriteIncludeManyMethodInfo = typeof(IGroup).GetMethods().First(x => x.Name == nameof(IGroup.WriteIncludeAsync) && x.GetParameters()[2].ParameterType.IsArray);
 
         static readonly MethodInfo fireAndForget = typeof(BroadcasterHelper).GetMethod(nameof(BroadcasterHelper.FireAndForget), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
 
