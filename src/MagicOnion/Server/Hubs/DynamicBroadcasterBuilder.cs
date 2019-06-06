@@ -85,8 +85,8 @@ namespace MagicOnion.Server.Hubs
             }
             {
                 var typeBuilder = asm.DefineType($"{AssemblyHolder.ModuleName}.{ti.FullName}BroadcasterIncludeMany_{Guid.NewGuid().ToString()}", TypeAttributes.Public, typeof(object), new Type[] { t });
-                var (group, except, ctor) = DefineConstructor4(typeBuilder);
-                DefineMethods(typeBuilder, t, group, methodDefinitions, groupWriteIncludeManyMethodInfo, except);
+                var (group, include, ctor) = DefineConstructor4(typeBuilder);
+                DefineMethods(typeBuilder, t, group, methodDefinitions, groupWriteIncludeManyMethodInfo, include);
                 BroadcasterType_IncludeMany = typeBuilder.CreateTypeInfo().AsType();
             }
         }
