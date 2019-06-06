@@ -3,6 +3,7 @@ using MessagePack;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace MagicOnion.Server.Hubs
@@ -253,46 +254,35 @@ namespace MagicOnion.Server.Hubs
             var message = BuildMessage(methodId, value);
 
             var source = members;
+            
             if (fireAndForget)
             {
+                var sourceDictionary = members.ToDictionary(x => x.ContextId);
                 var writeCount = 0;
-                for (int i = 0; i < source.Length; i++)
-                {
-                    foreach (var item in connectionIds)
-                    {
-                        if (source[i].ContextId != item)
-                        {
-                            goto NEXT;
-                        }
+                foreach (var contextId in connectionIds) {
+                    if (sourceDictionary.TryGetValue(contextId, out var context)) {
+                        WriteInAsyncLockVoid(context, message);
+                        writeCount++;
                     }
-
-                    WriteInAsyncLockVoid(source[i], message);
-                    writeCount++;
-                    NEXT:
-                    continue;
                 }
+
                 logger.InvokeHubBroadcast(GroupName, message.Length, writeCount);
                 return TaskEx.CompletedTask;
             }
             else
             {
                 var promise = new ReservedWhenAllPromise(source.Length);
+                var connectionDictionary = connectionIds.ToDictionary(x => x);
                 var writeCount = 0;
-                for (int i = 0; i < source.Length; i++)
-                {
-                    foreach (var item in connectionIds)
-                    {
-                        if (source[i].ContextId != item)
-                        {
-                            promise.Add(default(ValueTask));
-                            goto NEXT;
-                        }
+                for (var i = 0; i < source.Length; ++i) {
+                    if (connectionDictionary.TryGetValue(
+                        source[i].ContextId,
+                        out var connectionId)) {
+                        promise.Add(WriteInAsyncLock(source[i], message));
+                        writeCount++;
+                    } else {
+                        promise.Add(default(ValueTask));
                     }
-
-                    promise.Add(WriteInAsyncLock(source[i], message));
-                    writeCount++;
-                    NEXT:
-                    continue;
                 }
 
                 logger.InvokeHubBroadcast(GroupName, message.Length, writeCount);

@@ -3,6 +3,8 @@ using MessagePack;
 using System;
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -264,6 +266,7 @@ namespace MagicOnion.Server.Hubs
                 {
                     var buffer = rent;
                     var index = 0;
+                    
                     foreach (var item in members)
                     {
                         if (buffer.Length < index)
@@ -299,22 +302,18 @@ namespace MagicOnion.Server.Hubs
         public Task WriteIncludeAsync<T>(int methodId, T value, Guid[] connectionIds, bool fireAndForget)
         {
             var message = BuildMessage(methodId, value);
+            var source = members;
+            
             if (fireAndForget)
             {
                 var writeCount = 0;
-                foreach (var item in members)
+                foreach (var connectionId in connectionIds)
                 {
-                    foreach (var item2 in connectionIds)
+                    if (source.TryGetValue(connectionId, out var member))
                     {
-                        if (item.Value.ContextId != item2)
-                        {
-                            goto NEXT;
-                        }
+                        WriteInAsyncLockVoid(member, message);
+                        writeCount++;
                     }
-                    WriteInAsyncLockVoid(item.Value, message);
-                    writeCount++;
-                NEXT:
-                    continue;
                 }
                 logger.InvokeHubBroadcast(GroupName, message.Length, writeCount);
                 return TaskEx.CompletedTask;
@@ -328,26 +327,20 @@ namespace MagicOnion.Server.Hubs
                 {
                     var buffer = rent;
                     var index = 0;
-                    foreach (var item in members)
+                    var connectionDictionary = connectionIds.ToDictionary(x => x);
+                    foreach (var item in source)
                     {
                         if (buffer.Length < index)
                         {
                             Array.Resize(ref buffer, buffer.Length * 2);
                         }
 
-                        foreach (var item2 in connectionIds)
-                        {
-                            if (item.Value.ContextId != item2)
-                            {
-                                buffer[index++] = default(ValueTask);
-                                goto NEXT;
-                            }
+                        if (connectionDictionary.ContainsKey(item.Key)) {
+                            buffer[index++] = WriteInAsyncLock(item.Value, message);
+                            writeCount++;
+                        } else {
+                            buffer[index++] = default(ValueTask);
                         }
-                        buffer[index++] = WriteInAsyncLock(item.Value, message);
-                        writeCount++;
-
-                    NEXT:
-                        continue;
                     }
 
                     promise = ToPromise(buffer, index);
